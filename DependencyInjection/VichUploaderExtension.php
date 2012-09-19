@@ -20,7 +20,8 @@ class VichUploaderExtension extends Extension
      */
     protected $tagMap = array(
         'orm' => 'doctrine.event_subscriber',
-        'mongodb' => 'doctrine.odm.mongodb.event_subscriber'
+        'mongodb' => 'doctrine.odm.mongodb.event_subscriber',
+        'propel' => '__propel__'
     );
 
     /**
@@ -28,7 +29,8 @@ class VichUploaderExtension extends Extension
      */
     protected $adapterMap = array(
         'orm' => 'Vich\UploaderBundle\Adapter\ORM\DoctrineORMAdapter',
-        'mongodb' => 'Vich\UploaderBundle\Adapter\ODM\MongoDB\MongoDBAdapter'
+        'mongodb' => 'Vich\UploaderBundle\Adapter\ODM\MongoDB\MongoDBAdapter',
+        'propel' => 'Vich\UploaderBundle\Adapter\ORM\PropelORMAdapter'
     );
 
     /**
@@ -70,12 +72,36 @@ class VichUploaderExtension extends Extension
         if ($config['twig']) {
             $loader->load('twig.xml');
         }
-
+        
         $mappings = isset($config['mappings']) ? $config['mappings'] : array();
         $container->setParameter('vich_uploader.mappings', $mappings);
-
+        
         $container->setParameter('vich_uploader.storage_service', $config['storage']);
         $container->setParameter('vich_uploader.adapter.class', $this->adapterMap[$driver]);
-        $container->getDefinition('vich_uploader.listener.uploader')->addTag($this->tagMap[$driver]);
+                
+        if ($driver != 'propel')
+        {
+            // single listener
+            $container->getDefinition('vich_uploader.listener.uploader')->addTag($this->tagMap[$driver]);
+        }
+        else if (isset($config['propel_classes'])) 
+        {
+            // propel needs a listener per object class
+            $uploaderListenerDefinition = $container->getDefinition('vich_uploader.listener.uploader');
+            $uploaderListenerDefinition->setClass('Vich\UploaderBundle\EventListener\PropelUploaderListener');
+            
+            foreach ($config['propel_classes'] as $class)
+            {
+                $definition = clone($uploaderListenerDefinition);
+                
+                $definition->addTag('propel.event_listener', array('class' => $class, 'event' => 'propel.pre_save'));
+                $definition->addTag('propel.event_listener', array('class' => $class, 'event' => 'propel.pre_delete'));
+                $definition->addTag('propel.event_listener', array('class' => $class, 'event' => 'propel.post_hydrate'));
+                                
+                $container->setDefinition('vich_uploader.listener.uploader.' . strtr($class, '\\', '.'),  $definition);
+            }
+         
+            $container->removeDefinition('vich_uploader.listener.uploader');
+        }
     }
 }

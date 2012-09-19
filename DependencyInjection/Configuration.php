@@ -41,6 +41,9 @@ class Configuration implements ConfigurationInterface
                         ->end()
                     ->end()
                 ->end()
+                ->arrayNode('propel_classes')
+                    ->prototype('scalar')
+                ->end()                
             ->end()
         ;
 
